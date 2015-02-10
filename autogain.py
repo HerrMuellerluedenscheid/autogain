@@ -84,9 +84,8 @@ class AutoGain():
     def __init__(self, reference_nsl, traces):
         self.reference_nsl = reference_nsl
         self.traces = traces
-         
-        self.references = filter(lambda x: util.match_nslc(guess_nsl_template(
-                                                           self.reference_nsl), x.nslc_id) , self.traces)
+        match_this = guess_nsl_template(self.reference_nsl)
+        self.references = filter(lambda x: util.match_nslc(match_this, x.nslc_id), self.traces)
         self.minmax = {}
         self.scaling_factors = {}
 
@@ -95,36 +94,46 @@ class AutoGain():
             tr = tr.copy()
             tr.bandpass(**fband )
             if window:
-                tr.chop(window.get_tmin_tmax())
-            self.minmax[tr.channel] = trace.minmax([tr]).values()
+                tr.chop(*window.get_tmin_tmax())
+            #self.minmax[tr.channel] = trace.minmax([tr]).values()
+            self.minmax[tr.channel] = num.max(num.abs(tr.ydata))
             
-        print self.minmax
         for tr in self.traces:
             tr = tr.copy()
             tr.bandpass(**fband )
             if window:
-                tr.chop(window.get_tmin_tmax())
-            mm = trace.minmax([tr])
-            print self.minmax[tr.channel]
-            print mm.values()
-            self.scaling_factors[tr.nslc_id] = num.max(num.abs(self.minmax[tr.channel]))/num.max(num.abs(mm.values()))
+                tr.chop(*window.get_tmin_tmax())
+            #mm = trace.minmax([tr])
+            tr.ydata -= tr.ydata.mean()
+            mm = num.max(num.abs(tr.ydata))
+            self.scaling_factors[tr.nslc_id] = self.minmax[tr.channel]/mm
 
     def get_scaled(self):
         if self.scaling_factors == {}:
-            self.set_scaling_factors()
-        
+            raise Exception('run set_scaling_factors first')
+            
         scaled = []
         for tr in self.traces:
             tr = tr.copy()
             tr.ydata *= self.scaling_factors[tr.nslc_id]
             scaled.append(tr) 
         
+        self.scaled = scaled
         return scaled
         
+    def save_traces(self):
+        io.save(self.scaled, "autogained.mseed")
 
-def is_reference(tr):
-    reference_station = 'KAC'
-    return reference_station in tr.nslc_id
+    def __str__(self):
+        s = ''
+        for k,v in self.scaling_factors.items():
+            s+= "%s   %1.3f\n" %(k, v)
+        return s
+     
+
+def candidates():
+    
+    return candidates
 
 if __name__ == '__main__':
 
@@ -134,30 +143,23 @@ if __name__ == '__main__':
     #fbands.apppend([4.0, 10.])
     methods = ['minmax', 'match']
 
-    filenames = glob.glob('data/*.mseed')
-    print filenames
+    #filenames = glob.glob('data/*.mseed')
+    filenames = glob.glob('/data/webnet/waveform_R/2008/*')
     stations = model.load_stations('data/stations.pf')
     traces = []
-    references = {}
     for fn in filenames:
-        trs = io.load(fn)
-        for t in trs:
-            if is_reference(t):
-                references[t.channel] = t
-            else:
-                traces.append(t)
-
+        for tr in io.iload(fn):
+            traces.append(tr)
     traces = filter(lambda tr: tr.channel[-1]=='Z', traces)
-    
     fband = {'order':4, 'corner_hp':1.0, 'corner_lp':4.}
     #phases = PhasePie()
     #window = Window(phases)
     #ChopperConfig('P', stations)
-    print traces
     window = StaticWindow(tmin=util.str_to_time('2013-03-11 15:02:41.000'), 
                           static_length=30.)
-    ag = AutoGain('KRC', traces)
-
-    ag.set_scaling_factors(fband)
+    ag = AutoGain('NKC', traces)
+    ag.set_scaling_factors(fband, window)
     scaled_traces = ag.get_scaled()
+    ag.save_traces()
+    print ag
     trace.snuffle(scaled_traces)
