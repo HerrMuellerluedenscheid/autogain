@@ -1,3 +1,5 @@
+#!/use/bin/env python 
+
 import sys
 import glob
 import os
@@ -15,8 +17,9 @@ import logging
 import numpy as num
 import matplotlib
 matplotlib.use('GTK')
-import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+
+from util_optic import Optics
 
 pjoin = os.path.join
 logging.basicConfig(level=logging.INFO)
@@ -123,9 +126,15 @@ class Section():
 
     def finish(self, reference_nsl, fband, taper):
         for tr in self.traces:
+            tr_backup = tr.copy()
+            tr_backup.set_location('B' )
             tr.ydata -= tr.get_ydata().mean()
-            tr.taper(taper)
-            tr.bandpass(**fband)
+            tr.highpass(fband['order'], fband['corner_hp'])
+            tr.taper(taper, chop=False)
+            #print tr.ydata.shape
+            tr.lowpass(fband['order'], fband['corner_lp'])
+            #tr.bandpass(**fband)
+            #trace.snuffle([tr, tr_backup], events=[self.event])
             self.max_tr[tr.nslc_id] = num.max(num.abs(tr.get_ydata()))
         
         reference_nslc = filter(
@@ -198,9 +207,9 @@ class AutoGain():
                                                                 self.component),
                                                       tr.nslc_id)
                 
-                
                 window_min, window_max = window.t()
-                tr = self.data_pile.chopper(tmin=event.time+arrival - window_min, 
+                
+                tr = self.data_pile.chopper(tmin=event.time+arrival - window_min,
                                             tmax=event.time+arrival + window_max,
                                             trace_selector=selector)
                 _tr = tr.next()
@@ -220,7 +229,6 @@ class AutoGain():
 
             section.finish(self.reference_nsl, fband, taper)
             self.sections.append(section)
-
 
     def congreate(self):
         indx = dict(zip(self.all_nslc_ids, num.arange(0,len(self.all_nslc_ids))))
@@ -246,53 +254,6 @@ class AutoGain():
             self.congreate()
 
         return (self.all_nslc_ids, num.nanmean(self.results, axis=0))
-
-class Optics():
-    def __init__(self, autogain):
-        self.autogain = autogain
-        
-    def plot(self):
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        event_count = 0
-        for section in sorted(self.autogain.get_results(), key=lambda x:
-                              x.event.magnitude):
-            event_count += 1
-            for nslc_id in self.autogain.all_nslc_ids:
-                try:
-                    scale = section.relative_scalings[nslc_id]
-                except KeyError:
-                    continue
-                ax.plot(event_count, 
-                        scale, 
-                        'o',
-                        c=self.color(nslc_id), 
-                        ms=2+1.5**section.event.magnitude,
-                        label=nslc_id)
-
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = OrderedDict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys())
-
-        self.add_mean_lines(ax)
-
-    def add_mean_lines(self, ax):
-        ids, _means = self.autogain.mean
-        for i in range(len(_means)):
-            m = _means[i]
-            nslc_id = ids.pop()
-            ax.axhline(y=m, c=self.color(nslc_id), label=nslc_id)
-
-    def set_color(self):
-        want = self.autogain.all_nslc_ids
-        self._color_dict = dict(zip(want, num.linspace(0, 1, len(want))))
-    
-    def color(self, nslc_id):
-        try:
-            return cm.gist_rainbow(self._color_dict[nslc_id])
-        except AttributeError: 
-            self.set_color()
-            return cm.gist_rainbow(self._color_dict[nslc_id])
 
 def min_dist(event, stations):
     dists = [distance_accurate50m(event, s) for s in stations]
@@ -328,31 +289,33 @@ if __name__ == '__main__':
 
     #filenames = glob.glob('data/*.mseed')
     #filenames = glob.glob('/data/webnet/waveform_R/2008/*.mseed')
-    datapath = '/data/webnet/mseed/2008'
+    #datapath = '/data/webnet/mseed/2008'
+    #datapath = '/data/webnet/waveform_R/2008'
+    datapath = '/data/share/Res_all_NKC'
     stations = model.load_stations('data/stations.pf')
     reference_id ='KRC'
     references = {}
-    data_pile = pile.make_pile(datapath)
+    data_pile = pile.make_pile(datapath, selector='*2008*')
     
     
     fband = {'order':4, 'corner_hp':1.0, 'corner_lp':4.}
-    window = StaticLengthWindow(static_length=20., 
+    window = StaticLengthWindow(static_length=30., 
                                 phase_position=0.4)
     
-    taper = trace.CosFader(xfrac=0.15)
+    taper = trace.CosFader(xfrac=0.25)
     
     event_selector = EventSelector(distmin=1000*km,
                                    distmax=20000*km,
-                                   depthmin=1*km,
+                                   depthmin=2*km,
                                    depthmax=600*km,
                                    magmin=4.9)
 
     ag = AutoGain(reference_id, data_pile, stations=stations,
                   event_selector=event_selector, component='Z')
+    
     ag.set_phaser(phases)
     ag.set_window(window)
     ag.process(fband, taper)
-    ag.congreate()
     optics = Optics(ag)
     optics.plot()
     plt.show()
