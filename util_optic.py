@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-
+import numpy as num
 class Optics():
     def __init__(self, autogain):
         self.autogain = autogain

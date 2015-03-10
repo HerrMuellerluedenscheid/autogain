@@ -293,7 +293,7 @@ if __name__ == '__main__':
     #datapath = '/data/webnet/waveform_R/2008'
     datapath = '/data/share/Res_all_NKC'
     stations = model.load_stations('data/stations.pf')
-    reference_id ='KRC'
+    reference_id ='NKC'
     references = {}
     data_pile = pile.make_pile(datapath, selector='*2008*')
     
