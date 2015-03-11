@@ -11,12 +11,13 @@ from pyrocko import trace
 from pyrocko import model
 from pyrocko import catalog
 from pyrocko import pile
+from pyrocko import gui_util
 from pyrocko.orthodrome import distance_accurate50m
 from pyrocko.gf import LocalEngine
 import logging
 import numpy as num
 import matplotlib
-matplotlib.use('GTK')
+#matplotlib.use('GTK')
 import matplotlib.pyplot as plt
 
 from util_optic import Optics
@@ -88,7 +89,7 @@ def guess_nsl_template(code):
         return '%s.%s.%s.*'%(code)
 
 class EventSelector():
-    def __init__(self, magmin, distmin, distmax, depthmin=None, depthmax=None):
+    def __init__(self, magmin=None, distmin=None, distmax=None, depthmin=None, depthmax=None):
         self.magmin = magmin
         self.distmin = distmin
         self.distmax = distmax
@@ -100,7 +101,7 @@ class EventSelector():
         event_names = cat.get_event_names(time_range=(data_pile.tmin, 
                                                       data_pile.tmax),
                                           magmin=self.magmin)
-        
+
         events = [cat.get_event(en) for en in event_names]
         events = filter(lambda x: min_dist(x, stations)>=self.distmin, events)
         if self.distmax:
@@ -110,6 +111,14 @@ class EventSelector():
         if self.depthmax:
             events = filter(lambda x: x.depth<=self.depthmax, events)
         return events
+
+class EventCollection(EventSelector):
+    def __init__(self, *args, **kwargs):
+        self.events = kwargs.pop('events')
+        EventSelector(self, args, kwargs)
+
+    def get_events(self, *args, **kwargs):
+        return self.events
 
 class Section():
     ''' Related to one event. All traces scale relative to average mean abs
@@ -161,8 +170,12 @@ class Section():
         for tr in self.traces:
             tr = tr.copy()
             tr.ydata *= self.relative_scalings[tr.nslc_id]
+            tr.set_location('G')
             gained.append(tr)
         return gained
+
+    def get_ungained_traces(self):
+        return self.traces
 
     def snuffle(self):
         trace.snuffle(self.traces, events=[self.event], stations=self.stations)
@@ -230,6 +243,9 @@ class AutoGain():
             section.finish(self.reference_nsl, fband, taper)
             self.sections.append(section)
 
+    def get_sections(self):
+        return self.sections
+
     def congreate(self):
         indx = dict(zip(self.all_nslc_ids, num.arange(0,len(self.all_nslc_ids))))
         self.results = num.empty((len(self.sections), len(self.all_nslc_ids)))
@@ -283,7 +299,7 @@ if __name__ == '__main__':
     #fbands.apppend([4.0, 10.])
 
     phases = LocalEngine(store_superdirs=['/data/stores'],
-                         default_store_id='global_2s').get_store()
+                         default_store_id='globalttt').get_store()
     
     methods = ['minmax', 'match']
 
@@ -291,7 +307,8 @@ if __name__ == '__main__':
     #filenames = glob.glob('/data/webnet/waveform_R/2008/*.mseed')
     #datapath = '/data/webnet/mseed/2008'
     #datapath = '/data/webnet/waveform_R/2008'
-    datapath = '/data/share/Res_all_NKC'
+    #datapath = '/data/share/Res_all_NKC'
+    datapath = '/media/usb0/Res_all_NKC_taper'
     stations = model.load_stations('data/stations.pf')
     reference_id ='NKC'
     references = {}
@@ -300,15 +317,17 @@ if __name__ == '__main__':
     
     fband = {'order':4, 'corner_hp':1.0, 'corner_lp':4.}
     window = StaticLengthWindow(static_length=30., 
-                                phase_position=0.4)
+                                phase_position=0.5)
     
     taper = trace.CosFader(xfrac=0.25)
     
-    event_selector = EventSelector(distmin=1000*km,
-                                   distmax=20000*km,
-                                   depthmin=2*km,
-                                   depthmax=600*km,
-                                   magmin=4.9)
+    #event_selector = EventSelector(distmin=1000*km,
+    #                               distmax=20000*km,
+    #                               depthmin=2*km,
+    #                               depthmax=600*km,
+    #                               magmin=4.9)
+    candidates = [m.get_event() for m in gui_util.Marker.load_markers('candidates.pf')]
+    event_selector = EventCollection(events=candidates)
 
     ag = AutoGain(reference_id, data_pile, stations=stations,
                   event_selector=event_selector, component='Z')
@@ -319,4 +338,9 @@ if __name__ == '__main__':
     optics = Optics(ag)
     optics.plot()
     plt.show()
-    #trace.snuffle(scaled_traces, events=candidates)
+    for s in ag.get_sections():
+        scaled_traces = s.get_gained_traces()
+        unscaled_traces = s.get_ungained_traces()
+
+        scaled_traces.extend(unscaled_traces)
+        trace.snuffle(scaled_traces, events=candidates)
