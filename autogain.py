@@ -22,6 +22,8 @@ import matplotlib.pyplot as plt
 
 from util_optic import Optics
 
+from gains import Gains
+
 pjoin = os.path.join
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -36,7 +38,7 @@ class PhasePie():
         self.which = which
         self.model = cake.load_model('prem-no-ocean.m')
         self.arrivals = defaultdict(dict)
-    
+
     def t(self, phase_ids, z_dist):
         z, dist = z_dist 
         for phase_id in phase_ids.split('|'):
@@ -55,13 +57,13 @@ class PhasePie():
         else:
             self.arrivals[phase_id][(dist, z)] = arrivals
             return self.phase_selector(arrivals)
-    
+
     def phase_selector(self, _list):
         if self.which=='first':
             return min(_list, key=lambda x: x.tmin)
         if self.which=='last':
             return max(_list, key=lambda x: x.tmin)
-        
+
 class StaticWindow():
     def __init__(self, tmin, static_length):
         self.tmin = tmin
@@ -152,7 +154,7 @@ class Section():
         if not len(reference_nslc)==1:
             logger.info('no reference trace available. remains unfinished: %s' % self.event)
             self.reference_scale = 1.
-            self.set_relative_scalings()
+            #self.set_relative_scalings()
         else:
             self.reference_scale = self.max_tr[reference_nslc[0]]
             self.set_relative_scalings()
@@ -184,6 +186,7 @@ class Section():
         for nslc_id, scaling in self.relative_scalings.iteritems():
             yield (nslc_id, scaling)
 
+
 class AutoGain():
     def __init__(self, reference_nsl, data_pile, stations, event_selector, component='Z'):
         self.reference_nsl = reference_nsl
@@ -200,6 +203,7 @@ class AutoGain():
         self.scaling_factors = {}
         self.sections = []
         self.results = None
+        self._mean = None
 
     def process(self, fband, taper):
         for event in self.candidates:
@@ -269,7 +273,19 @@ class AutoGain():
         if self.results==None:
             self.congreate()
 
-        return (self.all_nslc_ids, num.nanmean(self.results, axis=0))
+        if self._mean==None:
+            self._mean = (self.all_nslc_ids, num.nanmean(self.results, axis=0))
+        return self._mean
+
+    def save_mean(self, fn):
+        g = Gains()
+        tmp = {}
+        ids, mean_section = self.mean
+        g.gains = dict(zip(ids, mean_section))
+        g.regularize()
+        #for i in xrange(len(ids)):
+        #    g.gains[ids[0][i]] = mean_section[i]
+        g.dump(filename=fn)
 
 def min_dist(event, stations):
     dists = [distance_accurate50m(event, s) for s in stations]
@@ -300,8 +316,6 @@ if __name__ == '__main__':
 
     phases = LocalEngine(store_superdirs=['/data/stores'],
                          default_store_id='globalttt').get_store()
-    
-    methods = ['minmax', 'match']
 
     #filenames = glob.glob('data/*.mseed')
     #filenames = glob.glob('/data/webnet/waveform_R/2008/*.mseed')
@@ -309,32 +323,37 @@ if __name__ == '__main__':
     #datapath = '/data/webnet/waveform_R/2008'
     #datapath = '/data/share/Res_all_NKC'
     datapath = '/media/usb0/Res_all_NKC_taper'
+    #datapath = '/media/usb0/restituted_pyrocko'
     stations = model.load_stations('data/stations.pf')
     reference_id ='NKC'
     references = {}
-    data_pile = pile.make_pile(datapath, selector='*2008*')
-    
-    
+    data_pile = pile.make_pile(datapath, selector='rest_*')
+
+
     fband = {'order':4, 'corner_hp':1.0, 'corner_lp':4.}
     window = StaticLengthWindow(static_length=30., 
                                 phase_position=0.5)
-    
+
     taper = trace.CosFader(xfrac=0.25)
-    
+
     #event_selector = EventSelector(distmin=1000*km,
     #                               distmax=20000*km,
     #                               depthmin=2*km,
     #                               depthmax=600*km,
     #                               magmin=4.9)
-    candidates = [m.get_event() for m in gui_util.Marker.load_markers('candidates.pf')]
+
+    candidate_fn = 'candidates2013.pf'
+    candidates = [m.get_event() for m in gui_util.Marker.load_markers(candidate_fn)]
     event_selector = EventCollection(events=candidates)
 
     ag = AutoGain(reference_id, data_pile, stations=stations,
                   event_selector=event_selector, component='Z')
-    
+
     ag.set_phaser(phases)
     ag.set_window(window)
     ag.process(fband, taper)
+    ag.save_mean(candidate_fn.replace('candidates', 'gains'))
+
     optics = Optics(ag)
     optics.plot()
     plt.show()

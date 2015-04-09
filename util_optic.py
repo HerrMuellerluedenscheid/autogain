@@ -29,6 +29,7 @@ class Optics():
         handles, labels = ax.get_legend_handles_labels()
         by_label = OrderedDict(zip(labels, handles))
         ax.legend(by_label.values(), by_label.keys())
+        ax.set_xlim([-1, len(sections)])
         self.add_event_labels(ax, sections)
         self.add_mean_lines(ax)
 
