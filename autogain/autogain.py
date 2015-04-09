@@ -224,7 +224,7 @@ class AutoGain():
                                                                 self.component),
                                                       tr.nslc_id)
                 
-                window_min, window_max = window.t()
+                window_min, window_max = self.window.t()
                 
                 tr = self.data_pile.chopper(tmin=event.time+arrival - window_min,
                                             tmax=event.time+arrival + window_max,
