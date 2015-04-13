@@ -270,21 +270,23 @@ class AutoGain():
 
     @property
     def mean(self):
-        if self.results==None:
+        if self.results is None:
             self.congreate()
-
-        if self._mean==None:
-            self._mean = (self.all_nslc_ids, num.nanmean(self.results, axis=0))
+        if self._mean is None:
+            self._mean = dict(zip(self.all_nslc_ids, num.nanmean(self.results, axis=0)))
+        print self._mean
         return self._mean
 
     def save_mean(self, fn):
         g = Gains()
         tmp = {}
-        ids, mean_section = self.mean
-        g.gains = dict(zip(ids, mean_section))
-        g.regularize()
+        g.trace_gains = self.mean
+        #g.gains = zip(ids, mean_section)
         #for i in xrange(len(ids)):
-        #    g.gains[ids[0][i]] = mean_section[i]
+        #    g.trace_gains[ids[i]] = mean_section[i]
+        #print g
+        g.regularize()
+        g.validate()
         g.dump(filename=fn)
 
 def min_dist(event, stations):

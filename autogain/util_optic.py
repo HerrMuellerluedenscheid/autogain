@@ -6,6 +6,7 @@ from collections import OrderedDict
 class Optics():
     def __init__(self, autogain):
         self.autogain = autogain
+        self.set_color()
 
     def plot(self):
         fig = plt.figure()
@@ -32,6 +33,9 @@ class Optics():
         ax.set_xlim([-1, len(sections)])
         self.add_event_labels(ax, sections)
         self.add_mean_lines(ax)
+    
+    def show(self):
+        plt.show()
 
     def add_event_labels(self, ax, sections):
         ymin, ymax = ax.get_ylim()
@@ -39,11 +43,10 @@ class Optics():
             ax.text(i_s, ymax, s.event.name, rotation='vertical')
 
     def add_mean_lines(self, ax):
-        ids, _means = self.autogain.mean
-        for i in range(len(_means)):
-            m = _means[i]
-            nslc_id = ids.pop()
-            ax.axhline(y=m, c=self.color(nslc_id), label=nslc_id)
+        #ids, _means = self.autogain.mean
+        _means = self.autogain.mean
+        for k,v in _means.items():
+            ax.axhline(y=v, c=self.color(k), label=k)
 
     def set_color(self):
         want = self.autogain.all_nslc_ids
