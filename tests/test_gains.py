@@ -7,6 +7,8 @@ class TestGains(unittest.TestCase):
         g = gains.Gains()
         key = ('a','b','c','d')       
         val = 1.1
+        key = '.'.join(key)
+        print key
         g.trace_gains = {key: val}
         print g.load(g.dump())
 

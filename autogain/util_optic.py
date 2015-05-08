@@ -34,8 +34,15 @@ class Optics():
         self.add_event_labels(ax, sections)
         self.add_mean_lines(ax)
     
-    def show(self):
-        plt.show()
+    def show(self, file_name=None):
+        if file_name:
+            plt.savefig(file_name,
+                      dpi=600,
+                      bbox_inches='tight',
+                      pad_inches=0.02)
+
+        else:
+            plt.show()
 
     def add_event_labels(self, ax, sections):
         ymin, ymax = ax.get_ylim()
@@ -45,17 +52,53 @@ class Optics():
     def add_mean_lines(self, ax):
         #ids, _means = self.autogain.mean
         _means = self.autogain.mean
-        for k,v in _means.items():
+        for k, v in _means.items():
             ax.axhline(y=v, c=self.color(k), label=k)
 
     def set_color(self):
         want = self.autogain.all_nslc_ids
-        self._color_dict = dict(zip(want, num.linspace(0, 1, len(want))))
+        self._color_dict = dict(zip(map(lambda x: '.'.join(x), want), num.linspace(0, 1, len(want))))
 
-    def color(self, nslc_id):
+    def color(self, nslc_id_str):
+        if not isinstance(nslc_id_str, str):
+            try:
+                nslc_id_str = '.'.join(nslc_id_str)
+            except:
+                raise
         try:
-            return cm.gist_rainbow(self._color_dict[nslc_id])
+            return cm.gist_rainbow(self._color_dict[nslc_id_str])
         except AttributeError: 
             self.set_color()
-            return cm.gist_rainbow(self._color_dict[nslc_id])
+            return cm.gist_rainbow(self._color_dict[nslc_id_str])
+    
+    def make_waveform_compare(self):
+        for section in self.autogain.get_sections():
+            scaled = section.get_gained_traces()
+            unscaled = section.get_ungained_traces()
+
+            #ids = [t.nslc_id for t in scaled]
+            
+            #scaled = dict(zip([t.nslc_id for t in scaled], scaled))
+            #for k in scaled.keys():
+            #    k[1] = ''
+            #unscaled = dict(zip([t.nslc_id for t in unscaled], unscaled))
+            #print scaled
+            #print unscaled
+            f, axs = plt.subplots(len(scaled), 2, sharex=True, sharey=False)
+            i_ax = 0
+            for i_ax in range(len(scaled)):
+                ax_unscaled = axs[i_ax, 1]
+                ax_scaled = axs[i_ax, 0]
+                ax_unscaled.plot(unscaled[i_ax].get_xdata(), unscaled[i_ax].get_ydata())
+                ax_unscaled.text(0.99, 0.01, '.'.join(unscaled[i_ax].nslc_id),
+                                 verticalalignment='bottom',
+                                 horizontalalignment='right',
+                                 transform=ax_unscaled.transAxes)
+                ax_scaled.plot(scaled[i_ax].get_xdata(), scaled[i_ax].get_ydata())
+            f.savefig('%s.png'%section.event.name,
+                      dpi=600,
+                      bbox_inches='tight',
+                      pad_inches=0.02)
+        #plt.show()
+
 
