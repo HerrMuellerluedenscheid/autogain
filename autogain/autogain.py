@@ -148,15 +148,21 @@ class Section():
             #trace.snuffle([tr, tr_backup], events=[self.event])
             self.max_tr[tr.nslc_id] = num.max(num.abs(tr.get_ydata()))
         
-        reference_nslc = filter(
-            lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x), self.max_tr.keys())
-        self.____reference_nslc = reference_nslc
-        if not len(reference_nslc)==1:
-            logger.info('no reference trace available. remains unfinished: %s' % self.event)
-            self.reference_scale = 1.
-            #self.set_relative_scalings()
+        if reference_nsl is not True:
+            reference_nslc = filter(
+                lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x), self.max_tr.keys())
+            self.____reference_nslc = reference_nslc
+        
+            if not len(reference_nslc)==1:
+                logger.info('no reference trace available. remains unfinished: %s' % self.event)
+                self.reference_scale = 1.
+                #self.set_relative_scalings()
+            else:
+                self.reference_scale = self.max_tr[reference_nslc[0]]
+                self.set_relative_scalings()
+                self.finished = True
         else:
-            self.reference_scale = self.max_tr[reference_nslc[0]]
+            self.reference_scale = 1.
             self.set_relative_scalings()
             self.finished = True
 
@@ -188,8 +194,9 @@ class Section():
 
 
 class AutoGain():
-    def __init__(self, reference_nsl, data_pile, stations, event_selector, component='Z'):
-        self.reference_nsl = reference_nsl
+    def __init__(self, data_pile, stations, event_selector, component='Z',
+                 reference_nsl=None, scale_one=False):
+        self.reference_nsl = reference_nsl or scale_one
         #self.references = filter(lambda x: util.match_nslc(guess_nsl_template(
         #                                                   self.reference_nsl), x.nslc_id) , self.traces)
 
@@ -273,8 +280,7 @@ class AutoGain():
         if self.results is None:
             self.congreate()
         if self._mean is None:
-            self._mean = dict(zip(self.all_nslc_ids, num.nanmean(self.results, axis=0)))
-        print self._mean
+            self._mean = dict(zip(map(lambda x: '.'.join(x), self.all_nslc_ids), num.nanmean(self.results, axis=0)))
         return self._mean
 
     def save_mean(self, fn):
