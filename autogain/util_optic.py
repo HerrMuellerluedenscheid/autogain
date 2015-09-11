@@ -71,7 +71,7 @@ class Optics():
             self.set_color()
             return cm.gist_rainbow(self._color_dict[nslc_id_str])
     
-    def make_waveform_compare(self):
+    def make_waveform_compare(self, sharey=False):
         for section in self.autogain.get_sections():
             scaled = section.get_gained_traces()
             unscaled = section.get_ungained_traces()
@@ -84,7 +84,7 @@ class Optics():
             #unscaled = dict(zip([t.nslc_id for t in unscaled], unscaled))
             #print scaled
             #print unscaled
-            f, axs = plt.subplots(len(scaled), 2, sharex=True, sharey=False)
+            f, axs = plt.subplots(len(scaled), 2, sharex=True, sharey=sharey)
             i_ax = 0
             for i_ax in range(len(scaled)):
                 ax_unscaled = axs[i_ax, 1]
