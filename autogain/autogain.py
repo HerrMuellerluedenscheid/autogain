@@ -9,7 +9,7 @@ from pyrocko import cake
 from pyrocko import util
 from pyrocko import trace
 from pyrocko import model
-from pyrocko import catalog
+from pyrocko import catalog as pyrocko_catalog
 from pyrocko import pile
 from pyrocko import gui_util
 from pyrocko.orthodrome import distance_accurate50m
@@ -34,35 +34,57 @@ def printl(l):
         print i
 
 class PhasePie():
-    def __init__(self, which='first'):
-        self.which = which
-        self.model = cake.load_model('prem-no-ocean.m')
+    def __init__(self, mod='prem-no-ocean.f'):
+        ''':param mod: Name of the model to be used. (see earthmodels in pyrocko)'''
+        self.model = cake.load_model(mod)
         self.arrivals = defaultdict(dict)
+        self.which = None
 
-    def t(self, phase_ids, z_dist):
-        z, dist = z_dist 
-        for phase_id in phase_ids.split('|'):
-            if phase_id in self.arrivals.keys() and (dist, z) in self.arrivals[phase_id].keys():
-                return phase_selector(self.arrivals[phase_id][(dist,z)], self.which)
-            else:
-                self.add_arrival(dist, z, phase_id)
-                continue
+    def t(self, phase_selection, z_dist):
+        ''':param phase_selection: phase names speparated by vertical bars
+        :param z_dist: tuple with (depth, distance)
+        '''
+        if 'first' in phase_selection:
+            self.which = 'first'
 
-    def add_arrival(self, dist, z, phase_id):
-        Phase = cake.PhaseDef(phase_id)
-        arrivals = self.model.arrivals(dist, phases=Phase, zstart=z)
+        if 'last' in phase_selection:
+            self.which = 'last'
+
+        if self.which:
+            phase_selection = self.strip(phase_selection)
+
+        z, dist = z_dist
+        if (phase_selection, dist, z) in self.arrivals.keys():
+            return self.arrivals[(phase_selection, dist, z)]
+
+        phases = [cake.PhaseDef(pid) for pid in phase_selection.split('|')]
+        arrivals = self.model.arrivals(distances=[dist*cake.m2d], phases=phases, zstart=z)
         if arrivals==[]:
-            logger.debug('no phase %s at d=%s, z=%s' %(phase_id, dist, z))
-            return 
+            logger.info('none of defined phases at d=%s, z=%s'  % (dist, z))
+            return
         else:
-            self.arrivals[phase_id][(dist, z)] = arrivals
-            return self.phase_selector(arrivals)
+            want = self.phase_selector(arrivals)
+            self.arrivals[(phase_selection, dist, z)] = want
+            return want
 
     def phase_selector(self, _list):
         if self.which=='first':
-            return min(_list, key=lambda x: x.tmin)
+            return min(_list, key=lambda x: x.t).t
         if self.which=='last':
-            return max(_list, key=lambda x: x.tmin)
+            return max(_list, key=lambda x: x.t).t
+
+    def strip(self, ps):
+        ps = ps.replace(self.which, '')
+        ps = ps.rstrip(')')
+        ps = ps.lstrip('(')
+        return ps
+
+    def __str__(self):
+        s = 'PhasePie'
+        for k1, kv in self.arrivals.items():
+            s += '%s %s \n' % (str(k1), kv)
+        return s
+
 
 class StaticWindow():
     def __init__(self, tmin, static_length):
@@ -91,20 +113,35 @@ def guess_nsl_template(code):
         return '%s.%s.%s.*'%(code)
 
 class EventSelector():
-    def __init__(self, magmin=None, distmin=None, distmax=None, depthmin=None, depthmax=None):
+    def __init__(self, magmin=None, distmin=None, distmax=None, depthmin=None,
+                 depthmax=None, catalog=None):
+        '''
+        Automatically download events from *catalog*.
+
+        :param magmin: minimum magnitude
+        :param distmin: minimum distance
+        :param distamx: maximum distance
+        :param depthmin: minimum depth
+        :param depthmax: maximum depth
+        :param catalog: instance of :py:class:`pyrocko.catalog.Earthquake`
+            subclass. Default is Geofon catalog.
+        '''
+
+        self.catalog = catalog or pyrocko_catalog.Geofon()
         self.magmin = magmin
         self.distmin = distmin
         self.distmax = distmax
         self.depthmin = depthmin
         self.depthmax = depthmax
 
-    def get_events(self, data_pile, stations):
-        cat = catalog.Geofon()
-        event_names = cat.get_event_names(time_range=(data_pile.tmin, 
+        self.events = None
+
+    def get_events(self, data_pile=None, stations=None):
+        event_names = self.catalog.get_event_names(time_range=(data_pile.tmin, 
                                                       data_pile.tmax),
                                           magmin=self.magmin)
 
-        events = [cat.get_event(en) for en in event_names]
+        events = [self.catalog.get_event(en) for en in event_names]
         events = filter(lambda x: min_dist(x, stations)>=self.distmin, events)
         if self.distmax:
             events = filter(lambda x: max_dist(x, stations)<=self.distmax, events)
@@ -112,7 +149,16 @@ class EventSelector():
             events = filter(lambda x: x.depth>=self.depthmin, events)
         if self.depthmax:
             events = filter(lambda x: x.depth<=self.depthmax, events)
+        self.events = events
         return events
+
+    def save_events(self, fn='candidates.pf'):
+        if not self.events:
+            raise Exception('Need to run processing first.')
+        else:
+            events = self.events
+
+        Event.dump_catalog(events, fn)
 
 class EventCollection(EventSelector):
     def __init__(self, *args, **kwargs):
@@ -142,21 +188,19 @@ class Section():
             tr.ydata -= tr.get_ydata().mean()
             tr.highpass(fband['order'], fband['corner_hp'])
             tr.taper(taper, chop=False)
-            #print tr.ydata.shape
             tr.lowpass(fband['order'], fband['corner_lp'])
-            #tr.bandpass(**fband)
-            #trace.snuffle([tr, tr_backup], events=[self.event])
             self.max_tr[tr.nslc_id] = num.max(num.abs(tr.get_ydata()))
-        
+
         if reference_nsl is not True:
             reference_nslc = filter(
                 lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x), self.max_tr.keys())
             self.____reference_nslc = reference_nslc
-        
+
             if not len(reference_nslc)==1:
                 logger.info('no reference trace available. remains unfinished: %s' % self.event)
                 self.reference_scale = 1.
                 #self.set_relative_scalings()
+                self.finished = False
             else:
                 self.reference_scale = self.max_tr[reference_nslc[0]]
                 self.set_relative_scalings()
@@ -195,7 +239,9 @@ class Section():
 
 class AutoGain():
     def __init__(self, data_pile, stations, event_selector, component='Z',
-                 reference_nsl=None, scale_one=False):
+                 reference_nsl=None, scale_one=False, phase_selection='first(p|P)'):
+        ''':param phase_selection: follows the logic of fomosto's Store phase definitions'''
+
         self.reference_nsl = reference_nsl or scale_one
         #self.references = filter(lambda x: util.match_nslc(guess_nsl_template(
         #                                                   self.reference_nsl), x.nslc_id) , self.traces)
@@ -204,7 +250,8 @@ class AutoGain():
         self.data_pile = data_pile
         self.stations = stations
         self.candidates = event_selector.get_events(data_pile, stations)
-        self.phaser = PhasePie()
+        self.phaser = None
+        self.phase_selection = phase_selection
         self.all_nslc_ids = set()
         self.minmax = {}
         self.scaling_factors = {}
@@ -219,7 +266,7 @@ class AutoGain():
             unskipped = 0
             for i_s, s in enumerate(self.stations):
                 dist = distance_accurate50m(event, s)
-                arrival = self.phaser.t('begin', (event.depth, dist))
+                arrival = self.phaser.t(self.phase_selection, (event.depth, dist))
                 if arrival==None:
                     skipped +=1
                     logger.debug('skipping event %s at stations %s. Reason no phase arrival'
@@ -230,9 +277,7 @@ class AutoGain():
                 selector = lambda tr: util.match_nslc('%s.*%s'%(s.nsl_string(),
                                                                 self.component),
                                                       tr.nslc_id)
-                
                 window_min, window_max = self.window.t()
-                
                 tr = self.data_pile.chopper(tmin=event.time+arrival - window_min,
                                             tmax=event.time+arrival + window_max,
                                             trace_selector=selector)
@@ -316,6 +361,7 @@ class Checker():
 
 
 if __name__ == '__main__':
+    '''usage example'''
     km = 1000.
     #fbands = []
     #fbands.apppend([1.0, 2.0])
@@ -332,7 +378,7 @@ if __name__ == '__main__':
     #datapath = '/data/share/Res_all_NKC'
     datapath = '/media/usb0/Res_all_NKC_taper'
     #datapath = '/media/usb0/restituted_pyrocko'
-    stations = model.load_stations('data/stations.pf')
+    stations = model.load_stations('../data/stations.pf')
     reference_id ='NKC'
     references = {}
     data_pile = pile.make_pile(datapath, selector='rest_*')
@@ -350,12 +396,12 @@ if __name__ == '__main__':
     #                               depthmax=600*km,
     #                               magmin=4.9)
 
-    candidate_fn = 'candidates2013.pf'
+    candidate_fn = '../candidates2013.pf'
     candidates = [m.get_event() for m in gui_util.Marker.load_markers(candidate_fn)]
     event_selector = EventCollection(events=candidates)
 
-    ag = AutoGain(reference_id, data_pile, stations=stations,
-                  event_selector=event_selector, component='Z')
+    ag = AutoGain(data_pile, stations=stations,
+                  reference_nsl=reference_id, event_selector=event_selector, component='Z')
 
     ag.set_phaser(phases)
     ag.set_window(window)

@@ -33,7 +33,7 @@ class Optics():
         ax.set_xlim([-1, len(sections)])
         self.add_event_labels(ax, sections)
         self.add_mean_lines(ax)
-    
+
     def show(self, file_name=None):
         if file_name:
             plt.savefig(file_name,
@@ -50,7 +50,6 @@ class Optics():
             ax.text(i_s, ymax, s.event.name, rotation='vertical')
 
     def add_mean_lines(self, ax):
-        #ids, _means = self.autogain.mean
         _means = self.autogain.mean
         for k, v in _means.items():
             ax.axhline(y=v, c=self.color(k), label=k)
@@ -67,28 +66,28 @@ class Optics():
                 raise
         try:
             return cm.gist_rainbow(self._color_dict[nslc_id_str])
-        except AttributeError: 
+        except AttributeError:
             self.set_color()
             return cm.gist_rainbow(self._color_dict[nslc_id_str])
-    
-    def make_waveform_compare(self, sharey=False):
+
+    def make_waveform_compare(self, sharey=True):
         for section in self.autogain.get_sections():
+            if section.finished == False:
+                continue
             scaled = section.get_gained_traces()
             unscaled = section.get_ungained_traces()
+            if len(scaled)<1:
+                continue
 
-            #ids = [t.nslc_id for t in scaled]
-            
-            #scaled = dict(zip([t.nslc_id for t in scaled], scaled))
-            #for k in scaled.keys():
-            #    k[1] = ''
-            #unscaled = dict(zip([t.nslc_id for t in unscaled], unscaled))
-            #print scaled
-            #print unscaled
             f, axs = plt.subplots(len(scaled), 2, sharex=True, sharey=sharey)
-            i_ax = 0
             for i_ax in range(len(scaled)):
+                f.suptitle(section.event.name)
                 ax_unscaled = axs[i_ax, 1]
                 ax_scaled = axs[i_ax, 0]
+                if i_ax == 0:
+                    ax_unscaled.set_title('unscaled')
+                    ax_scaled.set_title('scaled')
+
                 ax_unscaled.plot(unscaled[i_ax].get_xdata(), unscaled[i_ax].get_ydata())
                 ax_unscaled.text(0.99, 0.01, '.'.join(unscaled[i_ax].nslc_id),
                                  verticalalignment='bottom',
