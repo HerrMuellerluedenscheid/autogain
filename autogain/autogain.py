@@ -34,6 +34,7 @@ def printl(l):
         print i
 
 class PhasePie():
+    '''Calculates and caches phase arrivals'''
     def __init__(self, mod='prem-no-ocean.f'):
         ''':param mod: Name of the model to be used. (see earthmodels in pyrocko)'''
         self.model = cake.load_model(mod)
@@ -88,6 +89,7 @@ class PhasePie():
 
 class StaticWindow():
     def __init__(self, tmin, static_length):
+        '''Rigid, static window starting at *tmin* with a duration of *static_length*.'''
         self.tmin = tmin
         self.static_length = static_length
 
@@ -113,6 +115,19 @@ def guess_nsl_template(code):
         return '%s.%s.%s.*'%(code)
 
 class EventSelector():
+    '''subclasses need to implement *get_events()*'''
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def save_events(self, fn='candidates.pf'):
+        if not self.events:
+            raise Exception('Need to run processing first.')
+        else:
+            events = self.events
+
+        Event.dump_catalog(events, fn)
+
+class EventSelectorCatalog(EventSelector):
     def __init__(self, magmin=None, distmin=None, distmax=None, depthmin=None,
                  depthmax=None, catalog=None):
         '''
@@ -126,7 +141,7 @@ class EventSelector():
         :param catalog: instance of :py:class:`pyrocko.catalog.Earthquake`
             subclass. Default is Geofon catalog.
         '''
-
+        EventSelector.__init__(self)
         self.catalog = catalog or pyrocko_catalog.Geofon()
         self.magmin = magmin
         self.distmin = distmin
@@ -152,15 +167,13 @@ class EventSelector():
         self.events = events
         return events
 
-    def save_events(self, fn='candidates.pf'):
-        if not self.events:
-            raise Exception('Need to run processing first.')
-        else:
-            events = self.events
-
-        Event.dump_catalog(events, fn)
-
 class EventCollection(EventSelector):
+    '''A container for events. 
+
+    Instantiate using one of the two following kwargs:
+    :param events: list of :py:class:`pyrocko.model.Event` instances
+    :param markers: list of :py:class:`pyrocko.gui_util.EventMarker` instances
+    '''
     def __init__(self, *args, **kwargs):
         if 'events' in kwargs.keys():
             self.events = kwargs.pop('events')

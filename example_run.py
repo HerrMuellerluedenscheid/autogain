@@ -57,11 +57,11 @@ if __name__ == '__main__':
 
     # If you do not have a catalog, yet, you might want to automatically
     # download events either from Geofon or Iris.
-    event_selector = autogain.EventSelector(distmin=1000*km,
-                                            distmax=20000*km,
-                                            depthmin=2*km,
-                                            depthmax=600*km,
-                                            magmin=4.9)
+    event_selector = autogain.EventSelectorCatalog(distmin=1000*km,
+                                                   distmax=20000*km,
+                                                   depthmin=2*km,
+                                                   depthmax=600*km,
+                                                   magmin=4.9)
 
     # Setup the processing:
     ag = autogain.AutoGain(data_pile, stations=stations,
