@@ -162,7 +162,13 @@ class EventSelector():
 
 class EventCollection(EventSelector):
     def __init__(self, *args, **kwargs):
-        self.events = kwargs.pop('events')
+        if 'events' in kwargs.keys():
+            self.events = kwargs.pop('events')
+        elif 'markers' in kwargs.keys():
+            markers = kwargs.pop('markers')
+            self.events = [m.get_event() for m in markers]
+        else:
+            raise Exception('requires either "events" or "markers" kwargs.')
         EventSelector(self, args, kwargs)
 
     def get_events(self, *args, **kwargs):
