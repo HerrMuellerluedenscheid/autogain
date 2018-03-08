@@ -20,9 +20,9 @@ import matplotlib
 #matplotlib.use('GTK')
 import matplotlib.pyplot as plt
 
-from util_optic import Optics
+from autogain.util_optic import Optics
 
-from gains import Gains
+from autogain.gains import Gains
 
 pjoin = os.path.join
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +31,7 @@ km = 1000.
 
 def printl(l):
     for i in l:
-        print i
+        print(i)
 
 class PhasePie():
     '''Calculates and caches phase arrivals'''
@@ -211,8 +211,9 @@ class Section():
             self.max_tr[tr.nslc_id] = num.max(num.abs(tr.get_ydata()))
 
         if reference_nsl is not True:
-            reference_nslc = filter(
-                lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x), self.max_tr.keys())
+            reference_nslc = list(filter(
+                lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x), self.max_tr.keys()))
+            print(reference_nslc)
             self.____reference_nslc = reference_nslc
             if not len(reference_nslc)==1:
                 logger.info('no reference trace available. remains unfinished: %s' % self.event)
@@ -229,7 +230,7 @@ class Section():
             self.finished = True
 
     def set_relative_scalings(self):
-        for nslc_id, maxs in self.max_tr.iteritems():
+        for nslc_id, maxs in self.max_tr.items():
             self.relative_scalings[nslc_id] = self.reference_scale/maxs
 
     def extend(self, tr):
@@ -251,7 +252,7 @@ class Section():
         trace.snuffle(self.traces, events=[self.event], stations=self.stations)
 
     def iter_scalings(self):
-        for nslc_id, scaling in self.relative_scalings.iteritems():
+        for nslc_id, scaling in self.relative_scalings.items():
             yield (nslc_id, scaling)
 
 
@@ -300,7 +301,7 @@ class AutoGain():
                                             tmax=event.time+arrival + window_max,
                                             trace_selector=selector)
                 try:
-                    _tr = tr.next()    # macht ohne try und except kein sinn, oder?
+                    _tr = next(tr)    # macht ohne try und except kein sinn, oder?
                 except StopIteration:
                     continue
                 try:
@@ -312,7 +313,7 @@ class AutoGain():
                 except AssertionError:
                     continue
                 try:
-                    tr.next()
+                    next(tr)
                     raise Exception('More than one trace returned')
                 except StopIteration:
                     continue
@@ -358,7 +359,7 @@ class AutoGain():
         #g.gains = zip(ids, mean_section)
         #for i in xrange(len(ids)):
         #    g.trace_gains[ids[i]] = mean_section[i]
-        #print g
+        #print(g)
         g.regularize()
         g.validate()
         g.dump(filename=fn)
