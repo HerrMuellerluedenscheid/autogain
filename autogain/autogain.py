@@ -204,7 +204,7 @@ class Section():
         for tr in self.traces:
             tr_backup = tr.copy()
             tr_backup.set_location('B' )
-            tr.ydata -= tr.get_ydata().mean()
+            tr.ydata -= num.int32(tr.get_ydata().mean())  # dtype error! 
             tr.highpass(fband['order'], fband['corner_hp'])
             tr.taper(taper, chop=False)
             tr.lowpass(fband['order'], fband['corner_lp'])
@@ -214,7 +214,6 @@ class Section():
             reference_nslc = filter(
                 lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x), self.max_tr.keys())
             self.____reference_nslc = reference_nslc
-
             if not len(reference_nslc)==1:
                 logger.info('no reference trace available. remains unfinished: %s' % self.event)
                 self.reference_scale = 1.
@@ -300,12 +299,17 @@ class AutoGain():
                 tr = self.data_pile.chopper(tmin=event.time+arrival - window_min,
                                             tmax=event.time+arrival + window_max,
                                             trace_selector=selector)
-                _tr = tr.next()
+                try:
+                    _tr = tr.next()    # macht ohne try und except kein sinn, oder?
+                except StopIteration:
+                    continue
                 try:
                     assert len(_tr) in (0, 1)
                     self.all_nslc_ids.add(_tr[0].nslc_id)
                     section.extend(_tr)
                 except IndexError:
+                    continue
+                except AssertionError:
                     continue
                 try:
                     tr.next()
