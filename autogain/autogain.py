@@ -1,4 +1,4 @@
-#!/use/bin/env python 
+#!/use/bin/env python
 
 import sys
 import glob
@@ -16,8 +16,8 @@ from pyrocko.orthodrome import distance_accurate50m
 from pyrocko.gf import LocalEngine
 import logging
 import numpy as num
-import matplotlib
-#matplotlib.use('GTK')
+# import matplotlib
+# matplotlib.use('GTK')
 import matplotlib.pyplot as plt
 
 from autogain.util_optic import Optics
@@ -29,14 +29,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 km = 1000.
 
+
 def printl(l):
     for i in l:
         print(i)
 
+
 class PhasePie():
     '''Calculates and caches phase arrivals'''
     def __init__(self, mod='prem-no-ocean.f'):
-        ''':param mod: Name of the model to be used. (see earthmodels in pyrocko)'''
+        ''':param mod: Name of the model to be used.
+           (see earthmodels in pyrocko)'''
         self.model = cake.load_model(mod)
         self.arrivals = defaultdict(dict)
         self.which = None
@@ -59,9 +62,11 @@ class PhasePie():
             return self.arrivals[(phase_selection, dist, z)]
 
         phases = [cake.PhaseDef(pid) for pid in phase_selection.split('|')]
-        arrivals = self.model.arrivals(distances=[dist*cake.m2d], phases=phases, zstart=z)
-        if arrivals==[]:
-            logger.info('none of defined phases at d=%s, z=%s'  % (dist, z))
+        arrivals = self.model.arrivals(distances=[dist*cake.m2d],
+                                       phases=phases,
+                                       zstart=z)
+        if arrivals == []:
+            logger.info('none of defined phases at d=%s, z=%s' % (dist, z))
             return
         else:
             want = self.phase_selector(arrivals)
@@ -69,9 +74,9 @@ class PhasePie():
             return want
 
     def phase_selector(self, _list):
-        if self.which=='first':
+        if self.which == 'first':
             return min(_list, key=lambda x: x.t).t
-        if self.which=='last':
+        if self.which == 'last':
             return max(_list, key=lambda x: x.t).t
 
     def strip(self, ps):
@@ -89,12 +94,14 @@ class PhasePie():
 
 class StaticWindow():
     def __init__(self, tmin, static_length):
-        '''Rigid, static window starting at *tmin* with a duration of *static_length*.'''
+        '''Rigid, static window starting at *tmin*
+           with a duration of *static_length*.'''
         self.tmin = tmin
         self.static_length = static_length
 
     def get_tmin_tmax(self):
         return self.tmin, self.tmin+self.static_length
+
 
 class StaticLengthWindow():
     def __init__(self, static_length, phase_position):
@@ -104,15 +111,18 @@ class StaticLengthWindow():
         self.static_length = static_length
 
     def t(self):
-        return self.static_length*self.phase_position, self.static_length*1.0-self.phase_position
+        return self.static_length*self.phase_position,\
+               self.static_length*1.0-self.phase_position
+
 
 def guess_nsl_template(code):
-    if len(code)==1 or isinstance(code, str):
-        return '*.%s.*.*'%(code)
-    elif len(code)==2:
-        return '*.%s.%s.*'%(code)
-    elif len(code)==3:
-        return '%s.%s.%s.*'%(code)
+    if len(code) == 1 or isinstance(code, str):
+        return '*.%s.*.*' % (code)
+    elif len(code) == 2:
+        return '*.%s.%s.*' % (code)
+    elif len(code) == 3:
+        return '%s.%s.%s.*' % (code)
+
 
 class EventSelector():
     '''subclasses need to implement *get_events()*'''
@@ -125,7 +135,9 @@ class EventSelector():
         else:
             events = self.events
 
-        Event.dump_catalog(events, fn)
+        event.Event.dump_catalog(events, fn) # ???
+        # not sure, but pyrocko.model.Event moved to pyrocko.model.event.Event
+
 
 class EventSelectorCatalog(EventSelector):
     def __init__(self, magmin=None, distmin=None, distmax=None, depthmin=None,
@@ -152,23 +164,26 @@ class EventSelectorCatalog(EventSelector):
         self.events = None
 
     def get_events(self, data_pile=None, stations=None):
-        event_names = self.catalog.get_event_names(time_range=(data_pile.tmin, 
-                                                      data_pile.tmax),
-                                          magmin=self.magmin)
+        event_names = self.catalog.get_event_names(time_range=(data_pile.tmin,
+                                                               data_pile.tmax),
+                                                   magmin=self.magmin)
 
         events = [self.catalog.get_event(en) for en in event_names]
-        events = filter(lambda x: min_dist(x, stations)>=self.distmin, events)
+        events = filter(lambda x: min_dist(x, stations) >=
+                        self.distmin, events)
         if self.distmax:
-            events = filter(lambda x: max_dist(x, stations)<=self.distmax, events)
+            events = filter(lambda x: max_dist(x, stations) <=
+                            self.distmax, events)
         if self.depthmin:
-            events = filter(lambda x: x.depth>=self.depthmin, events)
+            events = filter(lambda x: x.depth >= self.depthmin, events)
         if self.depthmax:
-            events = filter(lambda x: x.depth<=self.depthmax, events)
+            events = filter(lambda x: x.depth <= self.depthmax, events)
         self.events = events
         return events
 
+
 class EventCollection(EventSelector):
-    '''A container for events. 
+    '''A container for events.
 
     Instantiate using one of the two following kwargs:
     :param events: list of :py:class:`pyrocko.model.Event` instances
@@ -187,6 +202,7 @@ class EventCollection(EventSelector):
     def get_events(self, *args, **kwargs):
         return self.events
 
+
 class Section():
     ''' Related to one event. All traces scale relative to average mean abs
     max'''
@@ -203,8 +219,8 @@ class Section():
     def finish(self, reference_nsl, fband, taper):
         for tr in self.traces:
             tr_backup = tr.copy()
-            tr_backup.set_location('B' )
-            tr.ydata -= num.int32(tr.get_ydata().mean())  # dtype error! 
+            tr_backup.set_location('B')
+            tr.ydata -= num.int32(tr.get_ydata().mean())  # otherwise dtype error!
             tr.highpass(fband['order'], fband['corner_hp'])
             tr.taper(taper, chop=False)
             tr.lowpass(fband['order'], fband['corner_lp'])
@@ -212,13 +228,15 @@ class Section():
 
         if reference_nsl is not True:
             reference_nslc = list(filter(
-                lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x), self.max_tr.keys()))
+                lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x),
+                                          self.max_tr.keys()))
             print(reference_nslc)
             self.____reference_nslc = reference_nslc
-            if not len(reference_nslc)==1:
-                logger.info('no reference trace available. remains unfinished: %s' % self.event)
+            if not len(reference_nslc) == 1:
+                logger.info('no reference trace available. ' +
+                            'remains unfinished: %s' % self.event)
                 self.reference_scale = 1.
-                #self.set_relative_scalings()
+                # self.set_relative_scalings()
                 self.finished = False
             else:
                 self.reference_scale = self.max_tr[reference_nslc[0]]
@@ -257,13 +275,16 @@ class Section():
 
 
 class AutoGain():
-    def __init__(self, data_pile, stations, event_selector, component='Z',
-                 reference_nsl=None, scale_one=False, phase_selection='first(p|P)'):
-        ''':param phase_selection: follows the logic of fomosto's Store phase definitions'''
+    def __init__(self, data_pile, stations, event_selector,
+                 component='Z', reference_nsl=None, scale_one=False,
+                 phase_selection='first(p|P)'):
+        ''':param phase_selection:
+            follows the logic of fomosto's Store phase definitions'''
 
         self.reference_nsl = reference_nsl or scale_one
-        #self.references = filter(lambda x: util.match_nslc(guess_nsl_template(
-        #                                                   self.reference_nsl), x.nslc_id) , self.traces)
+        #self.references = filter(lambda x:
+        #                          util.match_nslc(guess_nsl_template(
+        #                         self.reference_nsl), x.nslc_id) , self.traces)
 
         self.component = component
         self.data_pile = data_pile
@@ -285,23 +306,28 @@ class AutoGain():
             unskipped = 0
             for i_s, s in enumerate(self.stations):
                 dist = distance_accurate50m(event, s)
-                arrival = self.phaser.t(self.phase_selection, (event.depth, dist))
-                if arrival==None:
-                    skipped +=1
-                    logger.debug('skipping event %s at stations %s. Reason no phase arrival'
-                                % (event, s))
+                arrival = self.phaser.t(self.phase_selection,
+                                        (event.depth, dist))
+                if arrival is None:
+                    skipped += 1
+                    logger.debug('skipping event %s at stations %s. ' +
+                                 'Reason no phase arrival'
+                                 % (event, s))
                     continue
                 else:
-                    unskipped +=1
-                selector = lambda tr: util.match_nslc('%s.*%s'%(s.nsl_string(),
-                                                                self.component),
+                    unskipped += 1
+                selector = lambda tr: util.match_nslc('%s.*%s' %
+                                                      (s.nsl_string(),
+                                                       self.component),
                                                       tr.nslc_id)
                 window_min, window_max = self.window.t()
-                tr = self.data_pile.chopper(tmin=event.time+arrival - window_min,
-                                            tmax=event.time+arrival + window_max,
+                tr = self.data_pile.chopper(tmin=event.time+arrival -
+                                            window_min,
+                                            tmax=event.time+arrival +
+                                            window_max,
                                             trace_selector=selector)
                 try:
-                    _tr = next(tr)    # macht ohne try und except kein sinn, oder?
+                    _tr = next(tr)    # does not work without try and except?!
                 except StopIteration:
                     continue
                 try:
@@ -318,7 +344,7 @@ class AutoGain():
                 except StopIteration:
                     continue
 
-            logger.debug('skipped %s/%s'%(skipped, unskipped))
+            logger.debug('skipped %s/%s' % (skipped, unskipped))
 
             section.finish(self.reference_nsl, fband, taper)
             self.sections.append(section)
@@ -327,13 +353,12 @@ class AutoGain():
         return self.sections
 
     def congreate(self):
-        indx = dict(zip(self.all_nslc_ids, num.arange(0,len(self.all_nslc_ids))))
+        indx = dict(zip(self.all_nslc_ids, num.arange(0, len(self.all_nslc_ids))))
         self.results = num.empty((len(self.sections), len(self.all_nslc_ids)))
         self.results[:] = num.nan
         for i_sec, section in enumerate(self.sections):
             for nslc_id, scaling in section.iter_scalings():
                 self.results[i_sec, indx[nslc_id]] = scaling
-
 
     def get_results(self):
         return self.sections
@@ -349,12 +374,14 @@ class AutoGain():
         if self.results is None:
             self.congreate()
         if self._mean is None:
-            self._mean = dict(zip(map(lambda x: '.'.join(x), self.all_nslc_ids), num.nanmean(self.results, axis=0)))
+            self._mean = dict(zip(map(lambda x: '.'.join(x),
+                                      self.all_nslc_ids),
+                                  num.nanmean(self.results, axis=0)))
         return self._mean
 
     def save_mean(self, fn):
         g = Gains()
-        tmp = {}
+        #tmp = {}
         g.trace_gains = self.mean
         #g.gains = zip(ids, mean_section)
         #for i in xrange(len(ids)):
@@ -364,13 +391,16 @@ class AutoGain():
         g.validate()
         g.dump(filename=fn)
 
+
 def min_dist(event, stations):
     dists = [distance_accurate50m(event, s) for s in stations]
     return min(dists)
 
+
 def max_dist(event, stations):
     dists = [distance_accurate50m(event, s) for s in stations]
     return max(dists)
+
 
 def is_reference(tr, reference_station):
     return reference_station in tr.nslc_id
@@ -403,13 +433,12 @@ if __name__ == '__main__':
     datapath = '/media/usb0/Res_all_NKC_taper'
     #datapath = '/media/usb0/restituted_pyrocko'
     stations = model.load_stations('../data/stations.pf')
-    reference_id ='NKC'
+    reference_id = 'NKC'
     references = {}
     data_pile = pile.make_pile(datapath, selector='rest_*')
 
-
-    fband = {'order':4, 'corner_hp':1.0, 'corner_lp':4.}
-    window = StaticLengthWindow(static_length=30., 
+    fband = {'order': 4, 'corner_hp': 1.0, 'corner_lp': 4.}
+    window = StaticLengthWindow(static_length=30.,
                                 phase_position=0.5)
 
     taper = trace.CosFader(xfrac=0.25)
@@ -424,8 +453,11 @@ if __name__ == '__main__':
     candidates = [m.get_event() for m in gui_util.Marker.load_markers(candidate_fn)]
     event_selector = EventCollection(events=candidates)
 
-    ag = AutoGain(data_pile, stations=stations,
-                  reference_nsl=reference_id, event_selector=event_selector, component='Z')
+    ag = AutoGain(data_pile,
+                  stations=stations,
+                  reference_nsl=reference_id,
+                  event_selector=event_selector,
+                  component='Z')
 
     ag.set_phaser(phases)
     ag.set_window(window)
