@@ -16,8 +16,6 @@ from pyrocko.orthodrome import distance_accurate50m
 from pyrocko.gf import LocalEngine
 import logging
 import numpy as num
-# import matplotlib
-# matplotlib.use('GTK')
 import matplotlib.pyplot as plt
 
 from autogain.util_optic import Optics
@@ -218,19 +216,22 @@ class Section():
 
     def finish(self, reference_nsl, fband, taper):
         for tr in self.traces:
-            tr_backup = tr.copy()
-            tr_backup.set_location('B')
-            tr.ydata -= num.int32(tr.get_ydata().mean())  # otherwise dtype error!
-            tr.highpass(fband['order'], fband['corner_hp'])
-            tr.taper(taper, chop=False)
-            tr.lowpass(fband['order'], fband['corner_lp'])
-            self.max_tr[tr.nslc_id] = num.max(num.abs(tr.get_ydata()))
+            if len(tr.ydata) > 0 and num.max(num.abs(tr.get_ydata()))!= 0:
+                tr_backup = tr.copy()
+                tr_backup.set_location('B')
+                dtype = type(tr.ydata[0])
+                tr.ydata -= dtype(tr.get_ydata().mean())
+                tr.highpass(fband['order'], fband['corner_hp'])
+                tr.taper(taper, chop=False)
+                tr.lowpass(fband['order'], fband['corner_lp'])
+                if num.max(num.abs(tr.get_ydata()))!= 0:
+                    self.max_tr[tr.nslc_id] = num.max(num.abs(tr.get_ydata()))
+
 
         if reference_nsl is not True:
             reference_nslc = list(filter(
                 lambda x: util.match_nslc(guess_nsl_template(reference_nsl), x),
                                           self.max_tr.keys()))
-            print(reference_nslc)
             self.____reference_nslc = reference_nslc
             if not len(reference_nslc) == 1:
                 logger.info('no reference trace available. ' +
@@ -326,23 +327,15 @@ class AutoGain():
                                             tmax=event.time+arrival +
                                             window_max,
                                             trace_selector=selector)
-                try:
-                    _tr = next(tr)    # does not work without try and except?!
-                except StopIteration:
+                _tr = next(tr, False)    # does not work without try and except?!
+                if not _tr or len(_tr) != 1:
                     continue
-                try:
-                    assert len(_tr) in (0, 1)
-                    self.all_nslc_ids.add(_tr[0].nslc_id)
-                    section.extend(_tr)
-                except IndexError:
+                if not _tr[0].ydata.size:
                     continue
-                except AssertionError:
-                    continue
-                try:
-                    next(tr)
-                    raise Exception('More than one trace returned')
-                except StopIteration:
-                    continue
+                self.all_nslc_ids.add(_tr[0].nslc_id)
+
+                section.extend(_tr)
+
 
             logger.debug('skipped %s/%s' % (skipped, unskipped))
 
@@ -352,8 +345,8 @@ class AutoGain():
     def get_sections(self):
         return self.sections
 
-    def congreate(self):
-        indx = dict(zip(self.all_nslc_ids, num.arange(0, len(self.all_nslc_ids))))
+    def congregate(self):
+        indx = dict(zip(self.all_nslc_ids, num.arange(len(self.all_nslc_ids))))
         self.results = num.empty((len(self.sections), len(self.all_nslc_ids)))
         self.results[:] = num.nan
         for i_sec, section in enumerate(self.sections):
@@ -372,11 +365,13 @@ class AutoGain():
     @property
     def mean(self):
         if self.results is None:
-            self.congreate()
+            self.congregate()
         if self._mean is None:
             self._mean = dict(zip(map(lambda x: '.'.join(x),
                                       self.all_nslc_ids),
                                   num.nanmean(self.results, axis=0)))
+            # might rise a warning if for one station only nan are in results,
+            # but works fine.
         return self._mean
 
     def save_mean(self, fn):
