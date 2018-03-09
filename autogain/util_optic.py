@@ -94,7 +94,7 @@ class Optics():
                                  horizontalalignment='right',
                                  transform=ax_unscaled.transAxes)
                 ax_scaled.plot(scaled[i_ax].get_xdata(), scaled[i_ax].get_ydata())
-            f.savefig('%s.png'%section.event.name,
+            f.savefig('%s_py3.png'%section.event.name,
                       dpi=600,
                       bbox_inches='tight',
                       pad_inches=0.02)

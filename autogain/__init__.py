@@ -1,2 +1,2 @@
-from autogain import Gains
+from autogain.autogain import Gains
 __all__ = ["gains"]
